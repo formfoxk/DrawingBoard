@@ -44,6 +44,7 @@ IMPLEMENT_DYNCREATE(CGDIPracticeView, CView)
 		ON_WM_LBUTTONUP()
 		ON_WM_RBUTTONDOWN()
 
+		ON_WM_LBUTTONDBLCLK()
 	END_MESSAGE_MAP()
 
 	// CGDIPracticeView 생성/소멸
@@ -85,7 +86,7 @@ IMPLEMENT_DYNCREATE(CGDIPracticeView, CView)
 			pDC->MoveTo(m_ptCurr);
 			pDC->LineTo(m_ptPrev);
 			break;
-		case CIRCLE_MODE :					// 원 그리기
+		/*case CIRCLE_MODE :					// 원 그리기
 			pDC->Ellipse(m_ptCurr.x, m_ptCurr.y, m_ptPrev.x, m_ptPrev.y);
 			break;
 		case RECT_MODE :					// 사각형 그리기
@@ -94,7 +95,7 @@ IMPLEMENT_DYNCREATE(CGDIPracticeView, CView)
 		case POLY_MODE :					// 다각형 그리기
 			//배열에 저장한 순서대로 연결해 마지막 다각형 그리기
 			pDC->Polygon(m_ptData, m_nCount);
-			break;
+			break;*/
 		}
 		//이전 pen으로 설정
 		pDC->SelectObject(oldPen);	
@@ -263,13 +264,15 @@ IMPLEMENT_DYNCREATE(CGDIPracticeView, CView)
 	{
 		// TODO: 여기에 메시지 처리기 코드를 추가 및/또는 기본값을 호출합니다.
 		CClientDC dc(this);				//클라이언트 객체 얻음
-
-		// Pen 설정
-		CPen pen, *oldPen;		
-		pen.CreatePen(PS_SOLID, m_nPenSize, m_colorPen);	//Pen 객체 생성
-		oldPen = dc.SelectObject(&pen);						//Pen 객체 등록	
-
 		dc.SetROP2(R2_NOTXORPEN);			//R2_NOTXORPEN으로 설정
+		CPen cPen;		
+		cPen.CreatePen(PS_SOLID, m_nPenSize, m_colorPen);	//Pen 객체 생성
+		dc.SelectObject(&cPen);					//Pen 객체 등록	
+
+		Gdiplus::Color color;
+		color.SetFromCOLORREF(m_colorPen);
+		Graphics graphics(dc);
+		Pen pen(color, float(m_nPenSize));
 
 		switch(m_nDrawMode)
 		{
@@ -279,8 +282,8 @@ IMPLEMENT_DYNCREATE(CGDIPracticeView, CView)
 				dc.MoveTo(m_ptCurr);
 				dc.LineTo(m_ptPrev);			//이전 직선 지움
 				dc.MoveTo(m_ptCurr);
-				dc.LineTo(point);				//현재 직선 그림
-				m_ptPrev = point;				//이전 점에 현재 점을 저장
+				dc.LineTo(point);				//현재 직선 그림*/
+				m_ptPrev = point;				//이전 점에 현재 점을 저장*/
 			}
 			break;
 
@@ -303,35 +306,33 @@ IMPLEMENT_DYNCREATE(CGDIPracticeView, CView)
 		case FREE_MODE :						// 자유선 그리기
 			if (m_bLButtonDown)
 			{
-				dc.MoveTo(m_ptPrev);
-				dc.LineTo(point);				//현재 직선 그림
-				m_ptPrev = point;				//이전 점에 현재 점을 저장
+				graphics.DrawLine(&pen, m_ptPrev.x, m_ptPrev.y, point.x, point.y);
+				m_ptPrev = point;				//이전 점에 현재 점을 저장*/
 			}
+			break;
 		case POLY_MODE :						// 다각형 그리기
 			if (!m_bFirst)
 			{
 				dc.MoveTo(m_ptCurr);
-				dc.LineTo(m_ptPrev);
+				dc.LineTo(m_ptPrev);			//이전 직선 지움
 				dc.MoveTo(m_ptCurr);
-				dc.LineTo(point);
+				dc.LineTo(point);				//현재 직선 그림
 				m_ptPrev = point;				//이전 점에 현재 점을 저장
 			}
 			break;
-		}
-		//이전 pen으로 설정
-		dc.SelectObject(oldPen);	
+		}				
 
-		//pen 객체 삭제
-		pen.DeleteObject();						
+		// Pen 객제 제거
+		cPen.DeleteObject();
 
 		// 메인프레임의 포인터 얻음
 		CMainFrame *pFrame = (CMainFrame *)AfxGetMainWnd();
 
 		CString strPoint;
-		strPoint.Format(_T("마우스 위치 x : %d, y : %d"), point.x, point.y);
+		strPoint.Format(_T("x : %d, y : %d"), point.x, point.y);
 
 		// 새로 추가한 팬에 마우스 위치 출력
-		pFrame->m_wndStatusBar.SetPaneText(1, strPoint);	
+		pFrame->m_wndStatusBar.SetPaneText(4, strPoint);	
 
 
 		CView::OnMouseMove(nFlags, point);
@@ -349,7 +350,7 @@ IMPLEMENT_DYNCREATE(CGDIPracticeView, CView)
 			m_bFirst = true;
 			m_nCount = 0;
 			for(int i = 0; i < 50; i++)
-				m_ptData[i]=0;
+				m_ptData[i]=Point(0,0);
 		}
 
 		switch(m_nDrawMode)
@@ -369,7 +370,7 @@ IMPLEMENT_DYNCREATE(CGDIPracticeView, CView)
 			if (m_bFirst)		
 				m_bFirst=false;			//처음 그리는 것 -> false
 			m_ptCurr = m_ptPrev = point;		//시작점과 이전 점에 현재 점을 저장
-			m_ptData[m_nCount] = point;		//현재 점을 저장
+			m_ptData[m_nCount] = Point(point.x, point.y);		//현재 점을 저장
 			m_nCount++;			//카운트 증가
 			break;
 		}
@@ -400,34 +401,50 @@ IMPLEMENT_DYNCREATE(CGDIPracticeView, CView)
 	void CGDIPracticeView::OnRButtonDown(UINT nFlags, CPoint point)
 	{
 		// TODO: 여기에 메시지 처리기 코드를 추가 및/또는 기본값을 호출합니다.
-		// 다각형 그리기
+		
+		// 다각형 모드가 아닌 경우
+		if(m_nDrawMode != POLY_MODE){
+
+		}
+
+		CView::OnRButtonDown(nFlags, point);
+	}
+
+
+	void CGDIPracticeView::OnLButtonDblClk(UINT nFlags, CPoint point)
+	{
+		// TODO: 여기에 메시지 처리기 코드를 추가 및/또는 기본값을 호출합니다.
+			// 다각형 그리기
 		if(m_nDrawMode == POLY_MODE)
 		{
 			if( !m_bFirst )			// 처음 그리는 것이 아니면
 			{	
-				// 배열에 현재 점을 저장하고 카운트 증가
-				m_ptData[m_nCount] = point;
-				m_nCount++;
+			
 				// 체크변수 초기화 => 다시 다각형을 그리기 위해
 				m_bFirst = TRUE;
 
+
 				CClientDC dc(this);				//클라이언트 객체 얻음
-				// Pen 설정
-				CPen pen, *oldPen;		
-				pen.CreatePen(PS_SOLID, m_nPenSize, m_colorPen);	//Pen 객체 생성
-				oldPen = dc.SelectObject(&pen);					//Pen 객체 등록	
-
 				dc.SetROP2(R2_NOTXORPEN);			//R2_NOTXORPEN으로 설정
+				CPen cPen;		
+				cPen.CreatePen(PS_SOLID, m_nPenSize, m_colorPen);	//Pen 객체 생성
+				dc.SelectObject(&cPen);					//Pen 객체 등록	
+				dc.MoveTo(m_ptData[0].X, m_ptData[0].Y);
+				dc.LineTo(m_ptData[m_nCount-1].X, m_ptData[m_nCount-1].Y);
 
-				dc.Polygon(m_ptData, m_nCount);
-
-				//이전 pen으로 설정
-				dc.SelectObject(oldPen);	
-				// Pen 객제 제거
-				pen.DeleteObject();
+				cPen.DeleteObject();
+				/*
+				CPaintDC dc(this);
+				Gdiplus::Color color;
+				color.SetFromCOLORREF(m_colorPen);
+				Graphics graphics(dc);
+				Pen pen(color, float(m_nPenSize));
+				graphics.SetSmoothingMode(SmoothingModeHighQuality);
+				graphics.DrawPolygon(&pen, m_ptData, m_nCount);
+				*/
 			}
 		}
 
 
-		CView::OnRButtonDown(nFlags, point);
+		CView::OnLButtonDblClk(nFlags, point);
 	}

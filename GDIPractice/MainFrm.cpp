@@ -29,6 +29,7 @@ static UINT indicators[] =
 	ID_INDICATOR_CAPS,
 	ID_INDICATOR_NUM,
 	ID_INDICATOR_SCRL,
+	IDS_Pos,
 };
 
 // CMainFrame »ý¼º/¼Ò¸ê

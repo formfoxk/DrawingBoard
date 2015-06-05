@@ -71,7 +71,7 @@ private:
 	// 왼쪽 마우스 버튼을 클릭했는지 확인하는 변수
 	bool m_bLButtonDown;
 
-	CPoint m_ptData[50];
+	Point m_ptData[50];
 	int m_nCount;
 
 
@@ -104,6 +104,7 @@ public:
 	afx_msg void OnRButtonDown(UINT nFlags, CPoint point);
 
 	afx_msg void OnLButtonDown(UINT nFlags, CPoint point);
+	afx_msg void OnLButtonDblClk(UINT nFlags, CPoint point);
 };
 
 #ifndef _DEBUG  // GDIPracticeView.cpp의 디버그 버전
