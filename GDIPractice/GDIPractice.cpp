@@ -163,6 +163,8 @@ protected:
 // 구현입니다.
 protected:
 	DECLARE_MESSAGE_MAP()
+public:
+//	afx_msg void OnRButtonUp(UINT nFlags, CPoint point);
 };
 
 CAboutDlg::CAboutDlg() : CDialogEx(CAboutDlg::IDD)
@@ -175,6 +177,7 @@ void CAboutDlg::DoDataExchange(CDataExchange* pDX)
 }
 
 BEGIN_MESSAGE_MAP(CAboutDlg, CDialogEx)
+//	ON_WM_RBUTTONUP()
 END_MESSAGE_MAP()
 
 // 대화 상자를 실행하기 위한 응용 프로그램 명령입니다.
@@ -185,6 +188,4 @@ void CGDIPracticeApp::OnAppAbout()
 }
 
 // CGDIPracticeApp 메시지 처리기
-
-
 

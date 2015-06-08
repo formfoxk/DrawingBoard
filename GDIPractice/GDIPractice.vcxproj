@@ -103,6 +103,7 @@
   <ItemGroup>
     <ClInclude Include="CDlgEraser.h" />
     <ClInclude Include="CDlgPen.h" />
+    <ClInclude Include="CDrawComponent.h" />
     <ClInclude Include="GDIPractice.h" />
     <ClInclude Include="GDIPracticeDoc.h" />
     <ClInclude Include="GDIPracticeView.h" />
@@ -114,6 +115,7 @@
   <ItemGroup>
     <ClCompile Include="CDlgEraser.cpp" />
     <ClCompile Include="CDlgPen.cpp" />
+    <ClCompile Include="CDrawComponent.cpp" />
     <ClCompile Include="GDIPractice.cpp" />
     <ClCompile Include="GDIPracticeDoc.cpp" />
     <ClCompile Include="GDIPracticeView.cpp" />

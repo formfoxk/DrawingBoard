@@ -7,6 +7,7 @@
 #include "CDlgPen.h"
 #include "CDlgEraser.h"
 #include "MainFrm.h"
+#include "CDrawComponent.h"
 
 class CGDIPracticeView : public CView
 {
@@ -46,6 +47,15 @@ protected:
 
 // 사용자 멤버 변수
 private:
+	// 도형의 종류를 지정하기 위한 열거형 상수를 생성한다.
+	enum DRAW{DRAW_NONE, LINE_MODE, RECT_MODE, CIRCLE_MODE, FREE_MODE, POLY_MODE};
+
+	// 도형의 종류 변수
+	int m_nDrawMode;
+
+	// 이전 도형의 종류 변수
+	int m_nPrevDrawMode;
+
 	// 팬 크기 조절 변수
 	int m_nPenSize;
 
@@ -54,28 +64,27 @@ private:
 
 	// 지우개 크기 조절 변수
 	int m_nEraserSize;
-
-	// 도형의 종류를 지정하기 위한 열거형 상수를 생성한다.
-	enum DRAW{DRAW_NONE, LINE_MODE, RECT_MODE, CIRCLE_MODE, FREE_MODE, POLY_MODE};
 	
-	// 도형의 종류 저장 변수
-	int m_nDrawMode;
-
-	// 도형 그리기 위한 현재와 이전의 점 저장 변수
-	CPoint m_ptPrev;
-	CPoint m_ptCurr;
-
-	// 다각형에서는 초기 좌표값을 그리지 못하도록 하는 변수
+	// 버튼이 한번 클릭되었는지 확인하는 변수
 	bool m_bFirst;
 
 	// 왼쪽 마우스 버튼을 클릭했는지 확인하는 변수
 	bool m_bLButtonDown;
 
-	Point m_ptData[50];
-	int m_nCount;
+	// 모든 도형 요소들이 저장되는 배열
+	CArray<CDrawComponent*, CDrawComponent*> m_components;
 
+	// 다각형,자유선,지우개 좌표로 사용하는 포인트 배열
+	CArray<Point, Point> m_points;
 
+	// 도형 그리기 위한 현재와 이전의 좌표 저장 변수
+	CPoint m_ptPrev;
+	CPoint m_ptCurr;
 
+	// 현재 그리고 있는 좌표
+	CPoint m_ptDrawing;
+
+	bool newFileDown;
 public:
 	// 메시지 처리 함수
 	afx_msg void OnPenSize();
@@ -99,12 +108,15 @@ public:
 	// 마우스 이동 메시지 핸들러 함수를 구현 
 	afx_msg void OnMouseMove(UINT nFlags, CPoint point);
 
-	// 왼쪽 오른쪽 마우스가 눌러졌을 때 메시지 핸들러 함수
+	// 왼쪽 마우스가 눌러졌을 때 메시지 핸들러 함수
 	afx_msg void OnLButtonUp(UINT nFlags, CPoint point);
-	afx_msg void OnRButtonDown(UINT nFlags, CPoint point);
-
 	afx_msg void OnLButtonDown(UINT nFlags, CPoint point);
 	afx_msg void OnLButtonDblClk(UINT nFlags, CPoint point);
+
+	// 오른쪽 마우스가 눌러졌을 때 메시지 핸들러 함수
+	afx_msg void OnRButtonDown(UINT nFlags, CPoint point);
+	afx_msg void OnRButtonUp(UINT nFlags, CPoint point);
+	afx_msg void OnFileNew();
 };
 
 #ifndef _DEBUG  // GDIPracticeView.cpp의 디버그 버전

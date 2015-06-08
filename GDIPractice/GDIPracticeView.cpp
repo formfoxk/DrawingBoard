@@ -23,6 +23,7 @@ IMPLEMENT_DYNCREATE(CGDIPracticeView, CView)
 
 	BEGIN_MESSAGE_MAP(CGDIPracticeView, CView)
 		// 표준 인쇄 명령입니다.
+		ON_COMMAND(ID_FILE_NEW, &CGDIPracticeView::OnFileNew)
 		ON_COMMAND(ID_FILE_PRINT, &CView::OnFilePrint)
 		ON_COMMAND(ID_FILE_PRINT_DIRECT, &CView::OnFilePrint)
 		ON_COMMAND(ID_FILE_PRINT_PREVIEW, &CView::OnFilePrintPreview)
@@ -45,6 +46,8 @@ IMPLEMENT_DYNCREATE(CGDIPracticeView, CView)
 		ON_WM_RBUTTONDOWN()
 
 		ON_WM_LBUTTONDBLCLK()
+		ON_WM_RBUTTONUP()
+		
 	END_MESSAGE_MAP()
 
 	// CGDIPracticeView 생성/소멸
@@ -54,8 +57,10 @@ IMPLEMENT_DYNCREATE(CGDIPracticeView, CView)
 		// TODO: 여기에 생성 코드를 추가합니다.
 		m_nPenSize = 1;
 		m_colorPen = RGB(0,0,0); 
-		m_nDrawMode =  FREE_MODE;
+		m_nDrawMode =  POLY_MODE;
+		m_nEraserSize = 2;
 		m_bLButtonDown = false;
+		newFileDown = false;
 	}
 
 	CGDIPracticeView::~CGDIPracticeView()
@@ -74,37 +79,221 @@ IMPLEMENT_DYNCREATE(CGDIPracticeView, CView)
 
 	void CGDIPracticeView::OnDraw(CDC* pDC)
 	{
-		// Pen 설정
-		CPen pen, *oldPen;		
-		pen.CreatePen(PS_SOLID, m_nPenSize, m_colorPen);	//Pen 객체 생성
-		oldPen = pDC->SelectObject(&pen);					//Pen 객체 등록	
+		CClientDC dc(this);			//Client DC를 얻는다.
 
-		switch(m_nDrawMode)
+		// Client Rect를 얻는다.
+		CRect rClientRect;
+		GetClientRect(&rClientRect);
+
+		// Bitmap 생성
+		Bitmap mBitmap(rClientRect.Width(), rClientRect.Height());
+
+		// Graphics를 얻는다.
+		Graphics graphics(dc);
+
+		// 비트맵을 메모리 내에서 그릴 그래픽 생성
+		Graphics memGraphics(&mBitmap);
+
+		// 화면을 흰색 바탕으로 그리기 위한 브러쉬
+		SolidBrush drawBrush(Color(255,255,255));
+
+		// 검은색 컬러 지정
+		Color drawColor(255,0,0,0);
+
+		// 팬 생성
+		Pen drawPen(drawColor, 1);
+		drawPen.SetStartCap(LineCapRound);
+		drawPen.SetEndCap(LineCapRound);
+
+		// bitmap을 흰색으로 칠한다(line같은 경우 이미지가 남기 때문에)
+		memGraphics.FillRectangle(&drawBrush, 0,0,rClientRect.Width(), rClientRect.Height());
+
+		int componentSize = m_components.GetSize();
+		CString str;
+		str.Format(_T("size : %d\n"), componentSize);
+		TRACE(str);
+		for (int i = 0; i < componentSize; i++)
 		{
-		case LINE_MODE :					// 직선 그리기
-			//마지막 직선 그림
-			pDC->MoveTo(m_ptCurr);
-			pDC->LineTo(m_ptPrev);
-			break;
-		/*case CIRCLE_MODE :					// 원 그리기
-			pDC->Ellipse(m_ptCurr.x, m_ptCurr.y, m_ptPrev.x, m_ptPrev.y);
-			break;
-		case RECT_MODE :					// 사각형 그리기
-			pDC->Rectangle(m_ptCurr.x, m_ptCurr.y, m_ptPrev.x, m_ptPrev.y);
-			break;
-		case POLY_MODE :					// 다각형 그리기
-			//배열에 저장한 순서대로 연결해 마지막 다각형 그리기
-			pDC->Polygon(m_ptData, m_nCount);
-			break;*/
+			// 컴포넌트의 팬 설정
+			drawColor.SetFromCOLORREF(m_components.GetAt(i)->m_colorPen);
+			drawPen.SetColor(drawColor);
+			drawPen.SetWidth((float)m_components.GetAt(i)->m_nPenSize);
+
+			// 얕은 복사
+			CDrawComponent *component = m_components.GetAt(i);
+
+			switch (component->m_nDrawMode)
+			{
+				// 지우개인 경우
+			case DRAW_NONE:
+				{
+					// 팬의 브러쉬 색을 흰색으로 변경
+					drawBrush.SetColor(drawColor);
+
+					// 지우개를 사용한 좌표를 순차적으로 다시 그린다.
+					int pointSize = component->m_points.GetSize();
+					for (int j = 0; j < pointSize; j++)
+					{
+						// 흰색의 지우개 사각형을 그린다. 
+						memGraphics.FillRectangle(&drawBrush, component->m_points.GetAt(j).X, component->m_points.GetAt(j).Y,
+							component->m_nEraserSize * 2, component->m_nEraserSize * 2);
+					}
+					break;
+				}
+			case LINE_MODE:
+				memGraphics.DrawLine(&drawPen, component->m_ptStart.x, component->m_ptStart.y,
+					component->m_ptEnd.x, component->m_ptEnd.y);
+				break;
+			case RECT_MODE:
+			{
+				// 우측 아래
+				if(component->m_ptStart.x < component->m_ptEnd.x && component->m_ptStart.y < component->m_ptEnd.y)
+					memGraphics.DrawRectangle(&drawPen, component->m_ptStart.x, component->m_ptStart.y,
+					component->m_ptEnd.x - component->m_ptStart.x, component->m_ptEnd.y - component->m_ptStart.y);
+				// 우측 위
+				else if(component->m_ptStart.x < component->m_ptEnd.x && component->m_ptStart.y > component->m_ptEnd.y)
+					memGraphics.DrawRectangle(&drawPen, component->m_ptStart.x, component->m_ptEnd.y,
+					component->m_ptEnd.x - component->m_ptStart.x, component->m_ptStart.y - component->m_ptEnd.y);
+				// 좌측 아래
+				else if(component->m_ptStart.x > component->m_ptEnd.x && component->m_ptStart.y < component->m_ptEnd.y)
+					memGraphics.DrawRectangle(&drawPen, component->m_ptEnd.x, component->m_ptStart.y,
+					component->m_ptStart.x - component->m_ptEnd.x, component->m_ptEnd.y - component->m_ptStart.y);
+				// 좌측 위
+				else
+					memGraphics.DrawRectangle(&drawPen, component->m_ptEnd.x, component->m_ptEnd.y,
+					component->m_ptStart.x - component->m_ptEnd.x, component->m_ptStart.y - component->m_ptEnd.y);
+
+				break;
+			}
+			case CIRCLE_MODE:
+				memGraphics.DrawEllipse(&drawPen, component->m_ptStart.x, component->m_ptStart.y,
+					component->m_ptEnd.x - component->m_ptStart.x, component->m_ptEnd.y - component->m_ptStart.y);
+				break;
+			case FREE_MODE:
+				if (component->m_points.GetSize() > 1)
+				{
+					// 자유선의 작은 선들을을 순차적으로 하나씩 그린다.
+					int pointSize = component->m_points.GetSize();
+					for (int j = 1; j < pointSize; j++)
+						memGraphics.DrawLine(&drawPen, component->m_points.GetAt(j - 1).X, component->m_points.GetAt(j - 1).Y,
+						component->m_points.GetAt(j).X, component->m_points.GetAt(j).Y);
+				}
+				break;
+			case POLY_MODE:
+			{
+				int pointSize = component->m_points.GetSize();
+				for (int j = 1; j < pointSize; j++)
+					memGraphics.DrawLine(&drawPen, component->m_points.GetAt(j-1).X, component->m_points.GetAt(j-1).Y,
+					component->m_points.GetAt(j).X, component->m_points.GetAt(j).Y);
+
+				// 처음 점과 마지막점을 이어준다.
+				memGraphics.DrawLine(&drawPen, component->m_points.GetAt(component->m_points.GetSize() - 1).X,
+					component->m_points.GetAt(component->m_points.GetSize() - 1).Y,
+					component->m_points.GetAt(0).X, component->m_points.GetAt(0).Y);
+
+				break;
+			}
+			default:
+				break;
+			}
 		}
-		//이전 pen으로 설정
-		pDC->SelectObject(oldPen);	
-		// Pen 객제 제거
-		pen.DeleteObject();
+
+		//현재 그리고 있는 것
+
+		drawColor.SetFromCOLORREF(m_colorPen);
+		drawPen.SetColor(drawColor);
+		drawPen.SetWidth(m_nPenSize);
+
+		// 왼쪽 버튼 클릭시 || 지우개인경우 | 다각형인 경우(삭제)
+		if (m_nDrawMode == DRAW_NONE || m_nDrawMode == POLY_MODE || m_bLButtonDown)
+		{
+			switch (m_nDrawMode)
+			{
+			case DRAW_NONE:
+				{
+					// 브러쉬 흰색 설정
+					drawColor.SetFromCOLORREF(RGB(255, 255, 255));
+					drawBrush.SetColor(drawColor);
+					// 팬 컬러 검정색 설정
+					drawColor.SetFromCOLORREF(RGB(0, 0, 0));
+					drawPen.SetColor(drawColor);
+					drawPen.SetWidth(1);
+
+					int pointSize = m_points.GetSize()-1;
+					for (int i = 0; i < pointSize; i++)
+					{
+						memGraphics.FillRectangle(&drawBrush, m_points.GetAt(i).X, m_points.GetAt(i).Y,
+							m_nEraserSize * 2, m_nEraserSize * 2);
+					}
+					memGraphics.FillRectangle(&drawBrush, m_points.GetAt(m_points.GetSize() - 1).X, m_points.GetAt(m_points.GetSize() - 1).Y,
+						m_nEraserSize * 2, m_nEraserSize * 2);
+					memGraphics.DrawRectangle(&drawPen, m_points.GetAt(m_points.GetSize() - 1).X, m_points.GetAt(m_points.GetSize() - 1).Y,
+						m_nEraserSize * 2, m_nEraserSize * 2);
+
+					break;
+				}
+			case LINE_MODE:
+				memGraphics.DrawLine(&drawPen, m_ptPrev.x, m_ptPrev.y,
+					m_ptDrawing.x, m_ptDrawing.y);
+				break;
+			case RECT_MODE:
+			{
+				memGraphics.DrawRectangle(&drawPen, m_ptPrev.x, m_ptPrev.y,
+					m_ptDrawing.x - m_ptPrev.x, m_ptDrawing.y - m_ptPrev.y);
+
+				// 우측 아래
+				if(m_ptPrev.x < m_ptDrawing.x && m_ptPrev.y < m_ptDrawing.y)
+					memGraphics.DrawRectangle(&drawPen, m_ptPrev.x, m_ptPrev.y,
+					m_ptDrawing.x - m_ptPrev.x, m_ptDrawing.y - m_ptPrev.y);
+				// 우측 위
+				else if(m_ptPrev.x < m_ptDrawing.x && m_ptPrev.y > m_ptDrawing.y)
+					memGraphics.DrawRectangle(&drawPen, m_ptPrev.x, m_ptDrawing.y,
+					m_ptDrawing.x - m_ptPrev.x, m_ptPrev.y - m_ptDrawing.y);
+				// 좌측 아래
+				else if(m_ptPrev.x > m_ptDrawing.x && m_ptPrev.y < m_ptDrawing.y)
+					memGraphics.DrawRectangle(&drawPen, m_ptDrawing.x, m_ptPrev.y,
+					m_ptPrev.x - m_ptDrawing.x, m_ptDrawing.y - m_ptPrev.y);
+				// 좌측 위
+				else
+					memGraphics.DrawRectangle(&drawPen, m_ptDrawing.x, m_ptDrawing.y,
+					m_ptPrev.x - m_ptDrawing.x, m_ptPrev.y - m_ptDrawing.y);
+
+				break;
+			}
+			case CIRCLE_MODE:
+				memGraphics.DrawEllipse(&drawPen, m_ptPrev.x, m_ptPrev.y,
+					m_ptDrawing.x - m_ptPrev.x, m_ptDrawing.y - m_ptPrev.y);
+				break;
+			case FREE_MODE:
+				if (m_points.GetSize() > 1)
+				{
+					for (int i = 1; i < m_points.GetSize(); i++)
+						memGraphics.DrawLine(&drawPen, m_points.GetAt(i - 1).X, m_points.GetAt(i - 1).Y,
+						m_points.GetAt(i).X, m_points.GetAt(i).Y);
+				}
+				break;
+			case POLY_MODE:
+				if (m_points.GetSize() > 1)
+				{
+					for (int i = 1; i < m_points.GetSize(); i++)
+						memGraphics.DrawLine(&drawPen, m_points.GetAt(i-1).X, m_points.GetAt(i-1).Y,
+						m_points.GetAt(i).X, m_points.GetAt(i).Y);
+
+					// 처음 점과 마지막점을 이어준다.
+					memGraphics.DrawLine(&drawPen, m_points.GetAt(m_points.GetSize() - 1).X, m_points.GetAt(m_points.GetSize() - 1).Y,
+						m_ptDrawing.x, m_ptDrawing.y);
+				}
+				else if (m_points.GetSize() == 1)
+					memGraphics.DrawLine(&drawPen, m_points.GetAt(0).X, m_points.GetAt(0).Y, m_ptDrawing.x, m_ptDrawing.y);
+				break;
+			default:
+				break;
+			}
+		}
+		graphics.DrawImage(&mBitmap, 0, 0);
 	}
 
 	// CGDIPracticeView 인쇄
-
 	BOOL CGDIPracticeView::OnPreparePrinting(CPrintInfo* pInfo)
 	{
 		// 기본적인 준비
@@ -143,6 +332,15 @@ IMPLEMENT_DYNCREATE(CGDIPracticeView, CView)
 #endif //_DEBUG
 
 	// CGDIPracticeView 메시지 처리기
+	
+	void CGDIPracticeView::OnFileNew()
+	{
+		// TODO: 여기에 명령 처리기 코드를 추가합니다.
+		m_components.RemoveAll();
+		newFileDown = true;
+		Invalidate(false);
+	}
+
 	void CGDIPracticeView::OnPenSize()
 	{
 		// TODO: 여기에 명령 처리기 코드를 추가합니다.
@@ -263,77 +461,26 @@ IMPLEMENT_DYNCREATE(CGDIPracticeView, CView)
 	void CGDIPracticeView::OnMouseMove(UINT nFlags, CPoint point)
 	{
 		// TODO: 여기에 메시지 처리기 코드를 추가 및/또는 기본값을 호출합니다.
-		CClientDC dc(this);				//클라이언트 객체 얻음
-		dc.SetROP2(R2_NOTXORPEN);			//R2_NOTXORPEN으로 설정
-		CPen cPen;		
-		cPen.CreatePen(PS_SOLID, m_nPenSize, m_colorPen);	//Pen 객체 생성
-		dc.SelectObject(&cPen);					//Pen 객체 등록	
+		m_ptDrawing = point;
 
-		Gdiplus::Color color;
-		color.SetFromCOLORREF(m_colorPen);
-		Graphics graphics(dc);
-		Pen pen(color, float(m_nPenSize));
+		// 자유선인 경우
+		if (m_bLButtonDown && m_nDrawMode == FREE_MODE)
+			m_points.Add(Point(point.x,point.y));
 
-		switch(m_nDrawMode)
+		// 지우개 인 경우
+		if (m_nDrawMode == DRAW_NONE)
 		{
-		case LINE_MODE :						//직선 그리기
-			if (m_bLButtonDown)
-			{
-				dc.MoveTo(m_ptCurr);
-				dc.LineTo(m_ptPrev);			//이전 직선 지움
-				dc.MoveTo(m_ptCurr);
-				dc.LineTo(point);				//현재 직선 그림*/
-				m_ptPrev = point;				//이전 점에 현재 점을 저장*/
-			}
-			break;
+			m_ptPrev = CPoint(point.x - (m_nEraserSize), point.y - (m_nEraserSize));
+			m_points.Add(Point(m_ptPrev.x, m_ptPrev.y));
+		}
 
-		case CIRCLE_MODE :						//원 그리기
-			if (m_bLButtonDown)
-			{
-				dc.Ellipse(m_ptCurr.x, m_ptCurr.y, m_ptPrev.x, m_ptPrev.y);
-				dc.Ellipse(m_ptCurr.x, m_ptCurr.y, point.x, point.y);
-				m_ptPrev = point;				//이전 점에 현재 점을 저장
-			}
-			break;
-		case RECT_MODE :						// 사각형 그리기
-			if (m_bLButtonDown)
-			{
-				dc.Rectangle(m_ptCurr.x, m_ptCurr.y, m_ptPrev.x, m_ptPrev.y);
-				dc.Rectangle(m_ptCurr.x, m_ptCurr.y, point.x, point.y);
-				m_ptPrev = point;				//이전 점에 현재 점을 저장
-			}
-			break;
-		case FREE_MODE :						// 자유선 그리기
-			if (m_bLButtonDown)
-			{
-				graphics.DrawLine(&pen, m_ptPrev.x, m_ptPrev.y, point.x, point.y);
-				m_ptPrev = point;				//이전 점에 현재 점을 저장*/
-			}
-			break;
-		case POLY_MODE :						// 다각형 그리기
-			if (!m_bFirst)
-			{
-				dc.MoveTo(m_ptCurr);
-				dc.LineTo(m_ptPrev);			//이전 직선 지움
-				dc.MoveTo(m_ptCurr);
-				dc.LineTo(point);				//현재 직선 그림
-				m_ptPrev = point;				//이전 점에 현재 점을 저장
-			}
-			break;
-		}				
-
-		// Pen 객제 제거
-		cPen.DeleteObject();
-
-		// 메인프레임의 포인터 얻음
+		// 상태바에 현재 좌표 출력
 		CMainFrame *pFrame = (CMainFrame *)AfxGetMainWnd();
+		CString strMousePos;
+		strMousePos.Format(_T("x : %d, y : %d"), point.x, point.y);
+		pFrame->m_wndStatusBar.SetPaneText(4, strMousePos);
 
-		CString strPoint;
-		strPoint.Format(_T("x : %d, y : %d"), point.x, point.y);
-
-		// 새로 추가한 팬에 마우스 위치 출력
-		pFrame->m_wndStatusBar.SetPaneText(4, strPoint);	
-
+		Invalidate(false);
 
 		CView::OnMouseMove(nFlags, point);
 	}
@@ -342,40 +489,21 @@ IMPLEMENT_DYNCREATE(CGDIPracticeView, CView)
 	void CGDIPracticeView::OnLButtonDown(UINT nFlags, CPoint point)
 	{
 		// TODO: 여기에 메시지 처리기 코드를 추가 및/또는 기본값을 호출합니다.
+		// 그림을 지우는 경우
+		if (m_nDrawMode == DRAW_NONE) return;
 
-		if (m_bFirst)
-		{
-			m_ptCurr = m_ptPrev = 0;
-			m_bLButtonDown = false;
-			m_bFirst = true;
-			m_nCount = 0;
-			for(int i = 0; i < 50; i++)
-				m_ptData[i]=Point(0,0);
-		}
+		// 자유선 또는 다각형인 경우
+		if (m_nDrawMode == FREE_MODE || m_nDrawMode == POLY_MODE)
+			m_points.Add(Point(point.x, point.y));
 
-		switch(m_nDrawMode)
-		{	
-		case LINE_MODE :			//직선그리기
-		case CIRCLE_MODE :			//원 그리기
-		case RECT_MODE :			//사각형 그리기
-		case FREE_MODE :			//자유선 그리기
-			if (m_bFirst)
-			{
-				m_bLButtonDown = true; 			//왼쪽버튼이 눌림
-				m_ptCurr = m_ptPrev = point; 	//시작점과 이전 점에 현재 점을 저장
-				m_bFirst = false;				//처음 그리는 것 -> false
-				break;
-			}
-		case POLY_MODE :			//다각형 그리기
-			if (m_bFirst)		
-				m_bFirst=false;			//처음 그리는 것 -> false
-			m_ptCurr = m_ptPrev = point;		//시작점과 이전 점에 현재 점을 저장
-			m_ptData[m_nCount] = Point(point.x, point.y);		//현재 점을 저장
-			m_nCount++;			//카운트 증가
-			break;
-		}
+		// 현재 마우스의 좌표 저장
+		m_ptPrev= point;
+		m_ptDrawing = point;
 
+		// 왼쪽 버튼 클릭 참
+		m_bLButtonDown = true;
 
+		Invalidate(false);
 		CView::OnLButtonDown(nFlags, point);
 	}
 
@@ -383,68 +511,118 @@ IMPLEMENT_DYNCREATE(CGDIPracticeView, CView)
 	void CGDIPracticeView::OnLButtonUp(UINT nFlags, CPoint point)
 	{
 		// TODO: 여기에 메시지 처리기 코드를 추가 및/또는 기본값을 호출합니다.
-		if (m_bLButtonDown)			//왼쪽 마우스 버튼이 눌린 상태이면
+		// 그림을 지우는 경우
+		if (m_nDrawMode == DRAW_NONE) return;
+		
+			// 왼쪽 버튼이 눌러진 경우
+			m_bLButtonDown = false;
+		// 다각형이 아닌 경우
+		if (m_nDrawMode != POLY_MODE)
 		{
-			//그리기 모드가 직선 그리기, 원 그리기 이면
-			if(m_nDrawMode != POLY_MODE)
-			{
-				m_bLButtonDown = false;
-				m_bFirst = true;
-			}
+
+			// 현재 좌표 저장
+			m_ptCurr = point;
+
+			// 그림요소 생성
+			CDrawComponent *component = new CDrawComponent;
+			component->m_nPenSize = m_nPenSize;
+			component->m_colorPen = m_colorPen;
+			component->m_nEraserSize = m_nEraserSize;
+			component->m_nDrawMode = m_nDrawMode;
+			component->m_ptStart = m_ptPrev;
+			component->m_ptEnd = m_ptCurr;
+			component->m_points.Copy(m_points);
+
+			// 그림 구성요소들에 추가
+			m_components.Add(component);
+
+			// 좌표들 모두 삭제
+			m_points.RemoveAll();
 		}
 
-
+		Invalidate(false);
 		CView::OnLButtonUp(nFlags, point);
 	}
+	
+	void CGDIPracticeView::OnLButtonDblClk(UINT nFlags, CPoint point)
+	{
+		// TODO: 여기에 메시지 처리기 코드를 추가 및/또는 기본값을 호출합니다.
+		// 왼쪽 버튼 클릭 거짓으로 변경
+		m_bLButtonDown = false;
 
+		// 그림요소 생성
+		CDrawComponent *component = new CDrawComponent;
+		component->m_nPenSize = m_nPenSize;
+		component->m_colorPen = m_colorPen;
+		component->m_nEraserSize = m_nEraserSize;
+		component->m_nDrawMode = m_nDrawMode;
+		component->m_ptStart = m_ptPrev;
+		component->m_ptEnd = m_ptCurr;
+		component->m_points.Copy(m_points);
+
+		// 그림 구성요소들에 추가
+		m_components.Add(component);
+
+		// 좌표들 모두 삭제
+		m_points.RemoveAll();
+
+		Invalidate(false);
+
+		CView::OnLButtonDblClk(nFlags, point);
+	}
 
 	void CGDIPracticeView::OnRButtonDown(UINT nFlags, CPoint point)
 	{
 		// TODO: 여기에 메시지 처리기 코드를 추가 및/또는 기본값을 호출합니다.
+
+		// 왼쪽버튼이 눌러진 경우
+		if (m_bLButtonDown) return;
 		
-		// 다각형 모드가 아닌 경우
-		if(m_nDrawMode != POLY_MODE){
+		// 이전 그림 모드 저장
+		m_nPrevDrawMode = m_nDrawMode;
 
-		}
+		// 지우개 모드 전환
+		m_nDrawMode = DRAW_NONE;
 
+		// 현재 좌표 저장(지우개 사각형을 그리기 위해 지우개 사이즈만큼 좌표를 차감해서 저장)
+		m_ptPrev = CPoint(point.x - (m_nEraserSize), point.y - (m_nEraserSize));
+
+		// 현재 좌표 저장
+		m_points.Add(Point(m_ptPrev.x, m_ptPrev.y));
+
+		Invalidate(false);
 		CView::OnRButtonDown(nFlags, point);
 	}
 
-
-	void CGDIPracticeView::OnLButtonDblClk(UINT nFlags, CPoint point)
+	void CGDIPracticeView::OnRButtonUp(UINT nFlags, CPoint point)
 	{
-		// TODO: 여기에 메시지 처리기 코드를 추가 및/또는 기본값을 호출합니다.
-			// 다각형 그리기
-		if(m_nDrawMode == POLY_MODE)
-		{
-			if( !m_bFirst )			// 처음 그리는 것이 아니면
-			{	
-			
-				// 체크변수 초기화 => 다시 다각형을 그리기 위해
-				m_bFirst = TRUE;
+		// 왼쪽버튼이 눌러진 경우
+		if (m_bLButtonDown) return;
 
+		// 왼쪽버튼이 눌러지기 전의 그림모드로 변경
+		m_nDrawMode = m_nPrevDrawMode;
+	
+		// 현재 좌표 저장(지우개 사각형을 그리기 위해 지우개 사이즈만큼 좌표를 차감해서 저장)
+		m_ptPrev = CPoint(point.x - (m_nEraserSize), point.y - (m_nEraserSize));
 
-				CClientDC dc(this);				//클라이언트 객체 얻음
-				dc.SetROP2(R2_NOTXORPEN);			//R2_NOTXORPEN으로 설정
-				CPen cPen;		
-				cPen.CreatePen(PS_SOLID, m_nPenSize, m_colorPen);	//Pen 객체 생성
-				dc.SelectObject(&cPen);					//Pen 객체 등록	
-				dc.MoveTo(m_ptData[0].X, m_ptData[0].Y);
-				dc.LineTo(m_ptData[m_nCount-1].X, m_ptData[m_nCount-1].Y);
+		CDrawComponent * component = new CDrawComponent;
+		component->m_colorPen = RGB(255, 255, 255);
+		component->m_nEraserSize = m_nEraserSize;
+		component->m_nDrawMode = DRAW_NONE;
+		component->m_ptStart = m_ptPrev;
+		component->m_points.Copy(m_points);
 
-				cPen.DeleteObject();
-				/*
-				CPaintDC dc(this);
-				Gdiplus::Color color;
-				color.SetFromCOLORREF(m_colorPen);
-				Graphics graphics(dc);
-				Pen pen(color, float(m_nPenSize));
-				graphics.SetSmoothingMode(SmoothingModeHighQuality);
-				graphics.DrawPolygon(&pen, m_ptData, m_nCount);
-				*/
-			}
-		}
+		// 그림 구성요소들에 추가
+		m_components.Add(component);
 
+		// 좌표들 모두 삭제
+		m_points.RemoveAll();
 
-		CView::OnLButtonDblClk(nFlags, point);
+		Invalidate(false);
+		CView::OnRButtonUp(nFlags, point);
 	}
+
+
+
+
+
